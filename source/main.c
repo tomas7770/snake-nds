@@ -6,6 +6,7 @@
 #include "game.h"
 
 void tick() {
+    scanKeys();
     tick_game();
 }
 
@@ -17,7 +18,7 @@ int main() {
     nitroFSInit(NULL);
     NF_SetRootFolder("NITROFS");
 
-    init_game(NORMAL);
+    init_game(NORMAL, true);
 
     while (1) {
         tick();
