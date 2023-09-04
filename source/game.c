@@ -75,6 +75,14 @@ bool move_lock;
 // Whether screen wrap is enabled or not
 bool wrap;
 
+char get_translated_x(char x) {
+    return x + 32/2 - grid_width/2;
+}
+
+char get_translated_y(char y) {
+    return y + 24/2 - grid_height/2;
+}
+
 int get_snake_size() {
     return INITIAL_SNAKE_SIZE + score;
 }
@@ -106,9 +114,9 @@ void set_snake_body_tile(char x, char y, TileDir tile_dir) {
     default:
         break;
     }
-    NF_SetTileOfMap(game_screen, FG_LAYER, x, y, tile_id - TILE_INVISIBLE);
-    NF_ForceTileHflip(game_screen, FG_LAYER, x, y, h_flip);
-    NF_ForceTileVflip(game_screen, FG_LAYER, x, y, v_flip);
+    NF_SetTileOfMap(game_screen, FG_LAYER, get_translated_x(x), get_translated_y(y), tile_id - TILE_INVISIBLE);
+    NF_ForceTileHflip(game_screen, FG_LAYER, get_translated_x(x), get_translated_y(y), h_flip);
+    NF_ForceTileVflip(game_screen, FG_LAYER, get_translated_x(x), get_translated_y(y), v_flip);
 }
 
 void set_snake_tail_tile(char x, char y, SnakeDir forward_dir) {
@@ -127,9 +135,9 @@ void set_snake_tail_tile(char x, char y, SnakeDir forward_dir) {
     default:
         break;
     }
-    NF_SetTileOfMap(game_screen, FG_LAYER, x, y, tile_id - TILE_INVISIBLE);
-    NF_ForceTileHflip(game_screen, FG_LAYER, x, y, h_flip);
-    NF_ForceTileVflip(game_screen, FG_LAYER, x, y, v_flip);
+    NF_SetTileOfMap(game_screen, FG_LAYER, get_translated_x(x), get_translated_y(y), tile_id - TILE_INVISIBLE);
+    NF_ForceTileHflip(game_screen, FG_LAYER, get_translated_x(x), get_translated_y(y), h_flip);
+    NF_ForceTileVflip(game_screen, FG_LAYER, get_translated_x(x), get_translated_y(y), v_flip);
 }
 
 void new_snake_tile() {
@@ -157,6 +165,10 @@ void new_snake_tile() {
     prev_direction = direction;
 
     set_snake_body_tile(head_x, head_y, tile_dir);
+}
+
+void move_snake_head() {
+    NF_MoveSprite(game_screen, SPRITE_HEAD, get_translated_x(head_x)*8, get_translated_y(head_y)*8);
 }
 
 void rotate_snake_head() {
@@ -248,7 +260,7 @@ void init_game(Difficulty selected_difficulty, bool selected_wrap) {
     }
     NF_UpdateVramMap(game_screen, FG_LAYER);
 
-    NF_MoveSprite(game_screen, SPRITE_HEAD, head_x*8, head_y*8);
+    move_snake_head();
     rotate_snake_head();
     NF_SpriteOamSet(game_screen);
 }
@@ -288,7 +300,9 @@ void tick_game() {
         // Delete tail tile
         if (snake_tiles[snake_tile_i].valid) {
             NF_SetTileOfMap(game_screen, FG_LAYER,
-                snake_tiles[snake_tile_i].x, snake_tiles[snake_tile_i].y, TILE_INVISIBLE - TILE_INVISIBLE);
+                get_translated_x(snake_tiles[snake_tile_i].x),
+                get_translated_y(snake_tiles[snake_tile_i].y),
+                TILE_INVISIBLE - TILE_INVISIBLE);
         }
         
         // Add new tile at head position
@@ -337,7 +351,7 @@ void tick_game() {
             // WIP
         }
 
-        NF_MoveSprite(game_screen, SPRITE_HEAD, head_x*8, head_y*8);
+        move_snake_head();
         rotate_snake_head();
 
         NF_UpdateVramMap(game_screen, FG_LAYER);
