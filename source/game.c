@@ -14,9 +14,6 @@
 #define BG_LAYER 1
 #define FG_LAYER 0
 
-#define SPRITE_HEAD 0
-#define PALETTE_HEAD 0
-
 typedef enum {
     DIR_LEFT,
     DIR_UP,
@@ -49,6 +46,16 @@ typedef enum {
     TILEDIR_RIGHTDOWN,
 } TileDir;
 
+typedef enum {
+    SPRITE_HEAD,
+    SPRITE_FOOD,
+} SpriteId;
+
+typedef enum {
+    PALETTE_HEAD,
+    PALETTE_FOOD,
+} SprPaletteId;
+
 typedef struct {
     bool valid;
     char x;
@@ -73,6 +80,8 @@ int snake_tile_i;
 // Snake head position
 char head_x, head_y;
 SnakeDir direction, prev_direction;
+// Food position
+char food_x, food_y;
 char spd_counter;
 // If move_lock is true, cannot change snake direction
 bool move_lock;
@@ -235,11 +244,14 @@ void new_snake_tile() {
     set_snake_body_tile(head_x, head_y, tile_dir);
 }
 
-void move_snake_head() {
-    NF_MoveSprite(game_screen, SPRITE_HEAD, get_translated_x(head_x)*8, get_translated_y(head_y)*8);
+void randomize_food_pos() {
+    food_x = rand() % grid_width;
+    food_y = rand() % grid_height;
 }
 
-void rotate_snake_head() {
+void update_snake_head() {
+    NF_MoveSprite(game_screen, SPRITE_HEAD, get_translated_x(head_x)*8, get_translated_y(head_y)*8);
+
     bool h_flip = false, v_flip = false;
     switch (direction)
     {
@@ -260,6 +272,10 @@ void rotate_snake_head() {
     NF_VflipSprite(game_screen, SPRITE_HEAD, v_flip);
 }
 
+void update_food_spr() {
+    NF_MoveSprite(game_screen, SPRITE_FOOD, get_translated_x(food_x)*8, get_translated_y(food_y)*8);
+}
+
 // Init game state
 void init_game(Difficulty selected_difficulty, bool selected_wrap) {
     NF_Set2D(game_screen, 0);
@@ -277,6 +293,12 @@ void init_game(Difficulty selected_difficulty, bool selected_wrap) {
     NF_VramSpritePal(game_screen, PALETTE_HEAD, PALETTE_HEAD);
     NF_CreateSprite(game_screen, SPRITE_HEAD, SPRITE_HEAD, PALETTE_HEAD, 0, 0);
 
+    NF_LoadSpriteGfx("fruit", SPRITE_FOOD, 8, 8);
+    NF_LoadSpritePal("fruit", PALETTE_FOOD);
+    NF_VramSpriteGfx(game_screen, SPRITE_FOOD, SPRITE_FOOD, false);
+    NF_VramSpritePal(game_screen, PALETTE_FOOD, PALETTE_FOOD);
+    NF_CreateSprite(game_screen, SPRITE_FOOD, SPRITE_FOOD, PALETTE_FOOD, 0, 0);
+
     // Init variables
     difficulty = selected_difficulty;
     score = 0;
@@ -288,6 +310,7 @@ void init_game(Difficulty selected_difficulty, bool selected_wrap) {
     head_y = RANDOM_SNAKE_MARGIN + rand() % (grid_height-2*RANDOM_SNAKE_MARGIN);
     direction = rand() % NUM_DIRECTIONS;
     prev_direction = direction;
+    randomize_food_pos();
     spd_counter = 0;
     move_lock = false;
     wrap = selected_wrap;
@@ -331,8 +354,8 @@ void init_game(Difficulty selected_difficulty, bool selected_wrap) {
     }
     NF_UpdateVramMap(game_screen, FG_LAYER);
 
-    move_snake_head();
-    rotate_snake_head();
+    update_snake_head();
+    update_food_spr();
     NF_SpriteOamSet(game_screen);
 }
 
@@ -422,8 +445,13 @@ void tick_game() {
             // WIP
         }
 
-        move_snake_head();
-        rotate_snake_head();
+        if (head_x == food_x && head_y == food_y) {
+            score++;
+            randomize_food_pos();
+            update_food_spr();
+        }
+
+        update_snake_head();
 
         NF_UpdateVramMap(game_screen, FG_LAYER);
         NF_SpriteOamSet(game_screen);
