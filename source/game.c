@@ -28,6 +28,10 @@ typedef enum {
 
 typedef enum {
     TILE_VOID,
+    TILE_BORDER,
+    TILE_BORDER_HOR,
+    TILE_BORDER_VER,
+    TILE_BORDER_CORNER,
     TILE_INVISIBLE,
     TILE_BODY_HOR,
     TILE_BODY_VER,
@@ -81,6 +85,70 @@ char get_translated_x(char x) {
 
 char get_translated_y(char y) {
     return y + 24/2 - grid_height/2;
+}
+
+void build_bg_border() {
+    // Quite a mess... might clean it up at some point
+
+    // Top and bottom
+    for (char y = 0; y < get_translated_y(0)-1; y++) {
+        for (char x = 0; x < 32; x++) {
+            NF_SetTileOfMap(game_screen, BG_LAYER, x, y, TILE_BORDER);
+        }
+    }
+    for (char y = get_translated_y(grid_height)+1; y < 24; y++) {
+        for (char x = 0; x < 32; x++) {
+            NF_SetTileOfMap(game_screen, BG_LAYER, x, y, TILE_BORDER);
+        }
+    }
+    {
+        // Top edge
+        char y = get_translated_y(0)-1;
+        for (char x = 0; x < get_translated_x(0)-1; x++) {
+            NF_SetTileOfMap(game_screen, BG_LAYER, x, y, TILE_BORDER);
+        }
+        NF_SetTileOfMap(game_screen, BG_LAYER, get_translated_x(0)-1, y, TILE_BORDER_CORNER);
+        for (char x = get_translated_x(0); x < get_translated_x(grid_width); x++) {
+            NF_SetTileOfMap(game_screen, BG_LAYER, x, y, TILE_BORDER_VER);
+        }
+        NF_SetTileOfMap(game_screen, BG_LAYER, get_translated_x(grid_width), y, TILE_BORDER_CORNER);
+        NF_SetTileHflip(game_screen, BG_LAYER, get_translated_x(grid_width), y);
+        for (char x = get_translated_x(grid_width)+1; x < 32; x++) {
+            NF_SetTileOfMap(game_screen, BG_LAYER, x, y, TILE_BORDER);
+        }
+        // Bottom edge
+        y = get_translated_y(grid_height);
+        for (char x = 0; x < get_translated_x(0)-1; x++) {
+            NF_SetTileOfMap(game_screen, BG_LAYER, x, y, TILE_BORDER);
+            NF_SetTileVflip(game_screen, BG_LAYER, x, y);
+        }
+        NF_SetTileOfMap(game_screen, BG_LAYER, get_translated_x(0)-1, y, TILE_BORDER_CORNER);
+        NF_SetTileVflip(game_screen, BG_LAYER, get_translated_x(0)-1, y);
+        for (char x = get_translated_x(0); x < get_translated_x(grid_width); x++) {
+            NF_SetTileOfMap(game_screen, BG_LAYER, x, y, TILE_BORDER_VER);
+            NF_SetTileVflip(game_screen, BG_LAYER, x, y);
+        }
+        NF_SetTileOfMap(game_screen, BG_LAYER, get_translated_x(grid_width), y, TILE_BORDER_CORNER);
+        NF_SetTileHflip(game_screen, BG_LAYER, get_translated_x(grid_width), y);
+        NF_SetTileVflip(game_screen, BG_LAYER, get_translated_x(grid_width), y);
+        for (char x = get_translated_x(grid_width)+1; x < 32; x++) {
+            NF_SetTileOfMap(game_screen, BG_LAYER, x, y, TILE_BORDER);
+        }
+    }
+    // Middle
+    for (char y = get_translated_y(0); y < get_translated_y(grid_height); y++) {
+        for (char x = 0; x < get_translated_x(0)-1; x++) {
+            NF_SetTileOfMap(game_screen, BG_LAYER, x, y, TILE_BORDER);
+        }
+        NF_SetTileOfMap(game_screen, BG_LAYER, get_translated_x(0)-1, y, TILE_BORDER_HOR);
+        NF_SetTileOfMap(game_screen, BG_LAYER, get_translated_x(grid_width), y, TILE_BORDER_HOR);
+        NF_SetTileHflip(game_screen, BG_LAYER, get_translated_x(grid_width), y);
+        for (char x = get_translated_x(grid_width)+1; x < 32; x++) {
+            NF_SetTileOfMap(game_screen, BG_LAYER, x, y, TILE_BORDER);
+        }
+    }
+
+    NF_UpdateVramMap(game_screen, BG_LAYER);
 }
 
 int get_snake_size() {
@@ -197,7 +265,7 @@ void init_game(Difficulty selected_difficulty, bool selected_wrap) {
     NF_Set2D(game_screen, 0);
     // Init background
     NF_InitTiledBgSys(game_screen);
-    NF_LoadTilesForBg("tiles", "BG", 256, 256, TILE_VOID, TILE_VOID);
+    NF_LoadTilesForBg("tiles", "BG", 256, 256, TILE_VOID, TILE_BORDER_CORNER);
     NF_LoadTilesForBg("tiles", "FG", 256, 256, TILE_INVISIBLE, TILE_TAIL_VER);
     NF_CreateTiledBg(game_screen, BG_LAYER, "BG");
     NF_CreateTiledBg(game_screen, FG_LAYER, "FG");
@@ -223,6 +291,9 @@ void init_game(Difficulty selected_difficulty, bool selected_wrap) {
     spd_counter = 0;
     move_lock = false;
     wrap = selected_wrap;
+
+    // Build BG border
+    build_bg_border();
 
     // Set initial snake body tiles
     char x = head_x, y = head_y;
