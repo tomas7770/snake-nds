@@ -103,6 +103,7 @@ bool wrap;
 
 bool paused;
 PauseSelection pause_selection;
+bool game_over;
 
 char score_text_buffer[16];
 
@@ -377,6 +378,7 @@ void init_game(Difficulty selected_difficulty, bool selected_wrap) {
     wrap = selected_wrap;
     paused = false;
     pause_selection = PAUSE_CONTINUE;
+    game_over = false;
 
     // Build BG border
     build_bg_border();
@@ -456,9 +458,22 @@ void unpause_game() {
     NF_UpdateTextLayers();
 }
 
+void do_game_over() {
+    game_over = true;
+
+    NF_WriteText(game_screen, TEXT_LAYER, 23, 0, "Game over");
+    NF_UpdateTextLayers();
+}
+
 void tick_game() {
     int keys = keysHeld();
     int keysPressed = keysDown();
+
+    if (game_over) {
+        if (keysPressed & KEY_START)
+            init_title();
+        return;
+    }
 
     if (keysPressed & KEY_START) {
         if (paused) {
@@ -575,14 +590,24 @@ void tick_game() {
                 head_y = 0;
         }
         else if (head_x == (char) -1 || head_x == grid_width || head_y == (char) -1 || head_y == grid_height) {
-            // WIP
+            do_game_over();
         }
 
-        if (head_x == food_x && head_y == food_y) {
-            score++;
-            randomize_food_pos();
-            update_food_spr();
-            update_score_text();
+        
+        if (!game_over) {
+            // Collision with body
+            u32 tile_at_head = NF_GetTileOfMap(game_screen, FG_LAYER,
+                get_translated_x(head_x), get_translated_y(head_y));
+            if (tile_at_head >= TILE_BODY_HOR - TILE_INVISIBLE && tile_at_head <= TILE_TAIL_VER - TILE_INVISIBLE) {
+                do_game_over();
+            }
+
+            if (head_x == food_x && head_y == food_y) {
+                score++;
+                randomize_food_pos();
+                update_food_spr();
+                update_score_text();
+            }
         }
 
         update_snake_head();
