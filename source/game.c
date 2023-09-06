@@ -278,6 +278,10 @@ void update_food_spr() {
 
 // Init game state
 void init_game(Difficulty selected_difficulty, bool selected_wrap) {
+    state = STATE_GAME;
+    NF_ResetTiledBgBuffers();
+    NF_ResetSpriteBuffers();
+
     NF_Set2D(game_screen, 0);
     // Init background
     NF_InitTiledBgSys(game_screen);

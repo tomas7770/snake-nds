@@ -3,11 +3,23 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include "global.h"
+#include "title.h"
 #include "game.h"
 
 void tick() {
     scanKeys();
-    tick_game();
+    switch (state)
+    {
+    case STATE_TITLE:
+        tick_title();
+        break;
+    case STATE_GAME:
+        tick_game();
+        break;
+    default:
+        break;
+    }
 }
 
 int main() {
@@ -18,7 +30,7 @@ int main() {
     nitroFSInit(NULL);
     NF_SetRootFolder("NITROFS");
 
-    init_game(NORMAL, true);
+    init_title();
 
     while (1) {
         tick();

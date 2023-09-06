@@ -2,6 +2,11 @@
 #define __GLOBAL_H__
 
 typedef enum {
+    STATE_GAME,
+    STATE_TITLE,
+} State;
+
+typedef enum {
     VERY_SLOW,
     SLOW,
     NORMAL,
@@ -10,5 +15,7 @@ typedef enum {
     // Not an actual difficulty level
     NUM_DIFFICULTIES,
 } Difficulty;
+
+extern State state;
 
 #endif
