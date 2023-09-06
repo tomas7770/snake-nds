@@ -1,5 +1,6 @@
 #include <nf_lib.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include "nf_extra.h"
 #include "game.h"
 
@@ -11,8 +12,9 @@
 // Ideally > INITIAL_SNAKE_SIZE, or else some code changes will be necessary
 #define RANDOM_SNAKE_MARGIN 5
 
-#define BG_LAYER 1
-#define FG_LAYER 0
+#define BG_LAYER 2
+#define FG_LAYER 1
+#define TEXT_LAYER 0
 
 typedef enum {
     DIR_LEFT,
@@ -88,6 +90,8 @@ bool move_lock;
 // Whether screen wrap is enabled or not
 bool wrap;
 
+char score_text_buffer[16];
+
 char get_translated_x(char x) {
     return x + 32/2 - grid_width/2;
 }
@@ -100,7 +104,7 @@ void build_bg_border() {
     // Quite a mess... might clean it up at some point
 
     // Top and bottom
-    for (char y = 0; y < get_translated_y(0)-1; y++) {
+    for (char y = 1; y < get_translated_y(0)-1; y++) {
         for (char x = 0; x < 32; x++) {
             NF_SetTileOfMap(game_screen, BG_LAYER, x, y, TILE_BORDER);
         }
@@ -276,6 +280,12 @@ void update_food_spr() {
     NF_MoveSprite(game_screen, SPRITE_FOOD, get_translated_x(food_x)*8, get_translated_y(food_y)*8);
 }
 
+void update_score_text() {
+    snprintf(score_text_buffer, sizeof(score_text_buffer), "Score: %d", score);
+    NF_WriteText(game_screen, TEXT_LAYER, 0, 0, score_text_buffer);
+    NF_UpdateTextLayers();
+}
+
 // Init game state
 void init_game(Difficulty selected_difficulty, bool selected_wrap) {
     state = STATE_GAME;
@@ -285,10 +295,14 @@ void init_game(Difficulty selected_difficulty, bool selected_wrap) {
     NF_Set2D(game_screen, 0);
     // Init background
     NF_InitTiledBgSys(game_screen);
+    NF_InitTextSys(game_screen);
     NF_LoadTilesForBg("tiles", "BG", 256, 256, TILE_VOID, TILE_BORDER_CORNER);
     NF_LoadTilesForBg("tiles", "FG", 256, 256, TILE_INVISIBLE, TILE_TAIL_VER);
+    NF_LoadTextFont("fnt/default", "font", 256, 256, 0);
     NF_CreateTiledBg(game_screen, BG_LAYER, "BG");
     NF_CreateTiledBg(game_screen, FG_LAYER, "FG");
+    NF_CreateTextLayer(game_screen, TEXT_LAYER, 0, "font");
+    NF_DefineTextColor(game_screen, TEXT_LAYER, 0, 31, 7, 7);
     // Init sprites
     NF_InitSpriteSys(game_screen);
     NF_LoadSpriteGfx("head", SPRITE_HEAD, 8, 8);
@@ -357,6 +371,8 @@ void init_game(Difficulty selected_difficulty, bool selected_wrap) {
             set_snake_body_tile(x, y, tile_dir);
     }
     NF_UpdateVramMap(game_screen, FG_LAYER);
+
+    update_score_text();
 
     update_snake_head();
     update_food_spr();
@@ -453,6 +469,7 @@ void tick_game() {
             score++;
             randomize_food_pos();
             update_food_spr();
+            update_score_text();
         }
 
         update_snake_head();
