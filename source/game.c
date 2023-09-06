@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include "nf_extra.h"
 #include "game.h"
+#include "title.h"
 
 // Snake size doesn't include head
 #define INITIAL_SNAKE_SIZE 2
@@ -12,8 +13,9 @@
 // Ideally > INITIAL_SNAKE_SIZE, or else some code changes will be necessary
 #define RANDOM_SNAKE_MARGIN 5
 
-#define BG_LAYER 2
-#define FG_LAYER 1
+#define BG_LAYER 3
+#define FG_LAYER 2
+#define WINDOW_LAYER 1
 #define TEXT_LAYER 0
 
 typedef enum {
@@ -51,11 +53,13 @@ typedef enum {
 typedef enum {
     SPRITE_HEAD,
     SPRITE_FOOD,
+    SPRITE_ARROW,
 } SpriteId;
 
 typedef enum {
     PALETTE_HEAD,
     PALETTE_FOOD,
+    PALETTE_ARROW,
 } SprPaletteId;
 
 typedef struct {
@@ -64,6 +68,13 @@ typedef struct {
     char y;
     SnakeDir forward_dir;
 } SnakeTile;
+
+typedef enum {
+    PAUSE_CONTINUE,
+    PAUSE_QUIT,
+    // Not an actual selection
+    NUM_PAUSE_SELECTIONS,
+} PauseSelection;
 
 const char game_screen = 0;
 
@@ -89,6 +100,9 @@ char spd_counter;
 bool move_lock;
 // Whether screen wrap is enabled or not
 bool wrap;
+
+bool paused;
+PauseSelection pause_selection;
 
 char score_text_buffer[16];
 
@@ -162,6 +176,21 @@ void build_bg_border() {
     }
 
     NF_UpdateVramMap(game_screen, BG_LAYER);
+}
+
+void init_window() {
+    for (char y = 0; y < 24; y++) {
+        for (char x = 0; x < 32; x++) {
+            NF_SetTileOfMap(game_screen, WINDOW_LAYER, x, y, TILE_INVISIBLE);
+        }
+    }
+    for (char y = get_translated_y(0); y < get_translated_y(grid_height); y++) {
+        for (char x = get_translated_x(0); x < get_translated_x(grid_width); x++) {
+            NF_SetTileOfMap(game_screen, WINDOW_LAYER, x, y, TILE_VOID);
+        }
+    }
+    NF_HideBg(game_screen, WINDOW_LAYER);
+    NF_UpdateVramMap(game_screen, WINDOW_LAYER);
 }
 
 int get_snake_size() {
@@ -280,6 +309,11 @@ void update_food_spr() {
     NF_MoveSprite(game_screen, SPRITE_FOOD, get_translated_x(food_x)*8, get_translated_y(food_y)*8);
 }
 
+void update_pause_arrow_position() {
+    NF_MoveSprite(game_screen, SPRITE_ARROW, 12*8, (13 + pause_selection)*8);
+    NF_SpriteOamSet(game_screen);
+}
+
 void update_score_text() {
     snprintf(score_text_buffer, sizeof(score_text_buffer), "Score: %d", score);
     NF_WriteText(game_screen, TEXT_LAYER, 0, 0, score_text_buffer);
@@ -298,9 +332,11 @@ void init_game(Difficulty selected_difficulty, bool selected_wrap) {
     NF_InitTextSys(game_screen);
     NF_LoadTilesForBg("tiles", "BG", 256, 256, TILE_VOID, TILE_BORDER_CORNER);
     NF_LoadTilesForBg("tiles", "FG", 256, 256, TILE_INVISIBLE, TILE_TAIL_VER);
+    NF_LoadTilesForBg("tiles", "Window", 256, 256, TILE_VOID, TILE_INVISIBLE);
     NF_LoadTextFont("fnt/default", "font", 256, 256, 0);
     NF_CreateTiledBg(game_screen, BG_LAYER, "BG");
     NF_CreateTiledBg(game_screen, FG_LAYER, "FG");
+    NF_CreateTiledBg(game_screen, WINDOW_LAYER, "Window");
     NF_CreateTextLayer(game_screen, TEXT_LAYER, 0, "font");
     NF_DefineTextColor(game_screen, TEXT_LAYER, 0, 31, 7, 7);
     // Init sprites
@@ -317,6 +353,13 @@ void init_game(Difficulty selected_difficulty, bool selected_wrap) {
     NF_VramSpritePal(game_screen, PALETTE_FOOD, PALETTE_FOOD);
     NF_CreateSprite(game_screen, SPRITE_FOOD, SPRITE_FOOD, PALETTE_FOOD, 0, 0);
 
+    NF_LoadSpriteGfx("arrow", SPRITE_ARROW, 8, 8);
+    NF_LoadSpritePal("arrow", PALETTE_ARROW);
+    NF_VramSpriteGfx(game_screen, SPRITE_ARROW, SPRITE_ARROW, false);
+    NF_VramSpritePal(game_screen, PALETTE_ARROW, PALETTE_ARROW);
+    NF_CreateSprite(game_screen, SPRITE_ARROW, SPRITE_ARROW, PALETTE_ARROW, 0, 0);
+    NF_ShowSprite(game_screen, SPRITE_ARROW, false);
+
     // Init variables
     difficulty = selected_difficulty;
     score = 0;
@@ -332,9 +375,13 @@ void init_game(Difficulty selected_difficulty, bool selected_wrap) {
     spd_counter = 0;
     move_lock = false;
     wrap = selected_wrap;
+    paused = false;
+    pause_selection = PAUSE_CONTINUE;
 
     // Build BG border
     build_bg_border();
+
+    init_window();
 
     // Set initial snake body tiles
     char x = head_x, y = head_y;
@@ -379,8 +426,74 @@ void init_game(Difficulty selected_difficulty, bool selected_wrap) {
     NF_SpriteOamSet(game_screen);
 }
 
+void pause_game() {
+    paused = true;
+
+    NF_ShowBg(game_screen, WINDOW_LAYER);
+    NF_ShowSprite(game_screen, SPRITE_HEAD, false);
+    NF_ShowSprite(game_screen, SPRITE_FOOD, false);
+    NF_ShowSprite(game_screen, SPRITE_ARROW, true);
+    update_pause_arrow_position();
+
+    NF_WriteText(game_screen, TEXT_LAYER, 11, 11, "Game paused");
+    NF_WriteText(game_screen, TEXT_LAYER, 13, 13, "Continue");
+    NF_WriteText(game_screen, TEXT_LAYER, 13, 14, "Quit");
+    NF_UpdateTextLayers();
+}
+
+void unpause_game() {
+    paused = false;
+
+    NF_HideBg(game_screen, WINDOW_LAYER);
+    NF_ShowSprite(game_screen, SPRITE_HEAD, true);
+    NF_ShowSprite(game_screen, SPRITE_FOOD, true);
+    NF_ShowSprite(game_screen, SPRITE_ARROW, false);
+    NF_SpriteOamSet(game_screen);
+
+    NF_WriteText(game_screen, TEXT_LAYER, 11, 11, "           ");
+    NF_WriteText(game_screen, TEXT_LAYER, 13, 13, "        ");
+    NF_WriteText(game_screen, TEXT_LAYER, 13, 14, "    ");
+    NF_UpdateTextLayers();
+}
+
 void tick_game() {
     int keys = keysHeld();
+    int keysPressed = keysDown();
+
+    if (keysPressed & KEY_START) {
+        if (paused) {
+            unpause_game();
+        }
+        else {
+            pause_game();
+            return;
+        }
+    }
+
+    if (paused) {
+        if ((keysPressed & KEY_UP) && pause_selection > 0) {
+            pause_selection--;
+            update_pause_arrow_position();
+        }
+        else if ((keysPressed & KEY_DOWN) && pause_selection < NUM_PAUSE_SELECTIONS-1) {
+            pause_selection++;
+            update_pause_arrow_position();
+        }
+        if (keys & KEY_A) {
+            switch (pause_selection)
+            {
+            case PAUSE_CONTINUE:
+                unpause_game();
+                break;
+            case PAUSE_QUIT:
+                init_title();
+                break;
+            default:
+                break;
+            }
+        }
+        return;
+    }
 
     if (!move_lock) {
         if (direction == DIR_LEFT || direction == DIR_RIGHT) {
