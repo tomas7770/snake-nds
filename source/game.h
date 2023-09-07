@@ -3,7 +3,7 @@
 
 #include "global.h"
 
-void init_game(Difficulty selected_difficulty, bool selected_wrap);
+void init_game(Difficulty selected_difficulty, bool selected_wrap, int initial_stars);
 void tick_game();
 
 #endif

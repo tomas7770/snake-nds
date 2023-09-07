@@ -7,11 +7,18 @@
 
 // Snake size doesn't include head
 #define INITIAL_SNAKE_SIZE 2
-#define MAX_SCORE 255
-#define MAX_SNAKE_TILES (INITIAL_SNAKE_SIZE + MAX_SCORE)
+#define MAX_SCORE 9999
+#define MAX_SNAKE_TILES 339
 // Snake head must start with some margin from the borders
 // Ideally > INITIAL_SNAKE_SIZE, or else some code changes will be necessary
 #define RANDOM_SNAKE_MARGIN 5
+#define MAX_STARS 3
+
+#define FOOD_ANIM_FRAMES 4
+#define FOOD_ANIM_SPD 15
+
+#define END_GAME_BLINK_SPD 12
+#define END_GAME_TIME 180
 
 #define BG_LAYER 3
 #define FG_LAYER 2
@@ -40,6 +47,8 @@ typedef enum {
     TILE_TAIL_HOR,
     TILE_TAIL_VER,
 } TileId;
+
+#define TILEBASE_BODYFAT 5
 
 typedef enum {
     TILEDIR_HORIZONTAL,
@@ -83,10 +92,21 @@ const char grid_width = 20;
 const char grid_height = 17;
 
 // For each difficulty level, snake moves every X frames
-const char spd_table[NUM_DIFFICULTIES] = {15, 12, 10, 8, 6};
+// Speed increases when a star is gained
+const char spd_table[4][NUM_DIFFICULTIES] = {
+    {15, 12, 10, 8, 6},
+    {13, 10, 8, 6, 5},
+    {11, 9, 7, 5, 4},
+    {10, 8, 6, 4, 3}
+};
+
+// Score needed to reach 1 star, 2 stars, 3 stars, and to reset snake size at 3 stars
+const int star_threshold[MAX_STARS+1] = {200, 250, 300, MAX_SNAKE_TILES-INITIAL_SNAKE_SIZE};
 
 Difficulty difficulty;
 int score;
+int stars;
+int snake_size;
 // Snake tiles don't include head
 SnakeTile snake_tiles[MAX_SNAKE_TILES];
 int snake_tile_i;
@@ -95,6 +115,8 @@ char head_x, head_y;
 SnakeDir direction, prev_direction;
 // Food position
 char food_x, food_y;
+char food_anim_frame;
+char food_anim_counter;
 char spd_counter;
 // If move_lock is true, cannot change snake direction
 bool move_lock;
@@ -104,6 +126,10 @@ bool wrap;
 bool paused;
 PauseSelection pause_selection;
 bool game_over;
+
+bool level_beaten;
+char end_game_counter;
+bool text_shown;
 
 char score_text_buffer[16];
 
@@ -195,11 +221,12 @@ void init_window() {
 }
 
 int get_snake_size() {
-    return INITIAL_SNAKE_SIZE + score;
+    return snake_size;
 }
 
 void set_snake_body_tile(char x, char y, TileDir tile_dir) {
     TileId tile_id = TILE_BODY_HOR;
+    int frame = stars >= 3 ? TILEBASE_BODYFAT : 0;
     int h_flip = 0, v_flip = 0;
     switch (tile_dir)
     {
@@ -225,13 +252,14 @@ void set_snake_body_tile(char x, char y, TileDir tile_dir) {
     default:
         break;
     }
-    NF_SetTileOfMap(game_screen, FG_LAYER, get_translated_x(x), get_translated_y(y), tile_id - TILE_INVISIBLE);
+    NF_SetTileOfMap(game_screen, FG_LAYER, get_translated_x(x), get_translated_y(y), tile_id + frame - TILE_INVISIBLE);
     NF_ForceTileHflip(game_screen, FG_LAYER, get_translated_x(x), get_translated_y(y), h_flip);
     NF_ForceTileVflip(game_screen, FG_LAYER, get_translated_x(x), get_translated_y(y), v_flip);
 }
 
 void set_snake_tail_tile(char x, char y, SnakeDir forward_dir) {
     TileId tile_id = TILE_TAIL_HOR;
+    int frame = stars >= 3 ? TILEBASE_BODYFAT : 0;
     int h_flip = 0, v_flip = 0;
     switch (forward_dir)
     {
@@ -246,7 +274,7 @@ void set_snake_tail_tile(char x, char y, SnakeDir forward_dir) {
     default:
         break;
     }
-    NF_SetTileOfMap(game_screen, FG_LAYER, get_translated_x(x), get_translated_y(y), tile_id - TILE_INVISIBLE);
+    NF_SetTileOfMap(game_screen, FG_LAYER, get_translated_x(x), get_translated_y(y), tile_id + frame - TILE_INVISIBLE);
     NF_ForceTileHflip(game_screen, FG_LAYER, get_translated_x(x), get_translated_y(y), h_flip);
     NF_ForceTileVflip(game_screen, FG_LAYER, get_translated_x(x), get_translated_y(y), v_flip);
 }
@@ -286,18 +314,19 @@ void randomize_food_pos() {
 void update_snake_head() {
     NF_MoveSprite(game_screen, SPRITE_HEAD, get_translated_x(head_x)*8, get_translated_y(head_y)*8);
 
+    int frame = stars >= 3 ? 2 : 0;
     bool h_flip = false, v_flip = false;
     switch (direction)
     {
     case DIR_LEFT:
         h_flip = true;
     case DIR_RIGHT:
-        NF_SpriteFrame(game_screen, SPRITE_HEAD, 0);
+        NF_SpriteFrame(game_screen, SPRITE_HEAD, frame + 0);
         break;
     case DIR_DOWN:
         v_flip = true;
     case DIR_UP:
-        NF_SpriteFrame(game_screen, SPRITE_HEAD, 1);
+        NF_SpriteFrame(game_screen, SPRITE_HEAD, frame + 1);
         break;
     default:
         break;
@@ -310,9 +339,58 @@ void update_food_spr() {
     NF_MoveSprite(game_screen, SPRITE_FOOD, get_translated_x(food_x)*8, get_translated_y(food_y)*8);
 }
 
+void do_food_anim() {
+    if (stars >= 3) {
+        food_anim_counter = (food_anim_counter + 1) % FOOD_ANIM_SPD;
+        if (!food_anim_counter) {
+            food_anim_frame = (food_anim_frame + 1) % FOOD_ANIM_FRAMES;
+            NF_SpriteFrame(game_screen, SPRITE_FOOD, stars + food_anim_frame);
+        }
+        NF_SpriteOamSet(game_screen);
+    }
+}
+
 void update_pause_arrow_position() {
     NF_MoveSprite(game_screen, SPRITE_ARROW, 12*8, (13 + pause_selection)*8);
     NF_SpriteOamSet(game_screen);
+}
+
+void update_level_graphics() {
+    // Snake palette
+    switch (stars)
+    {
+    case 1:
+        // Yellow/orange snake
+        NF_BgSetPalColor(game_screen, FG_LAYER, 5, 26, 21, 0);
+        NF_BgSetPalColor(game_screen, FG_LAYER, 6, 31, 27, 0);
+        NF_BgSetPalColor(game_screen, FG_LAYER, 7, 31, 15, 0);
+        NF_SpriteSetPalColor(game_screen, PALETTE_HEAD, 5, 26, 21, 0);
+        NF_SpriteSetPalColor(game_screen, PALETTE_HEAD, 1, 31, 27, 0);
+        break;
+    case 2:
+        // Red snake
+        NF_BgSetPalColor(game_screen, FG_LAYER, 5, 26, 6, 6);
+        NF_BgSetPalColor(game_screen, FG_LAYER, 6, 31, 7, 7);
+        NF_BgSetPalColor(game_screen, FG_LAYER, 7, 31, 13, 0);
+        NF_SpriteSetPalColor(game_screen, PALETTE_HEAD, 5, 26, 6, 6);
+        NF_SpriteSetPalColor(game_screen, PALETTE_HEAD, 1, 31, 7, 7);
+        break;
+    default:
+        break;
+    }
+
+    // Stars
+    if (stars >= 1) {
+        NF_SetTileOfMap(game_screen, TEXT_LAYER, 11, 0, 114);
+        if (stars >= 2) {
+            NF_SetTileOfMap(game_screen, TEXT_LAYER, 12, 0, 115);
+            if (stars >= 3) {
+                NF_SetTileOfMap(game_screen, TEXT_LAYER, 13, 0, 116);
+            }
+        }
+    }
+    // Food
+    NF_SpriteFrame(game_screen, SPRITE_FOOD, stars);
 }
 
 void update_score_text() {
@@ -322,7 +400,7 @@ void update_score_text() {
 }
 
 // Init game state
-void init_game(Difficulty selected_difficulty, bool selected_wrap) {
+void init_game(Difficulty selected_difficulty, bool selected_wrap, int initial_stars) {
     state = STATE_GAME;
     NF_ResetTiledBgBuffers();
     NF_ResetSpriteBuffers();
@@ -332,7 +410,7 @@ void init_game(Difficulty selected_difficulty, bool selected_wrap) {
     NF_InitTiledBgSys(game_screen);
     NF_InitTextSys(game_screen);
     NF_LoadTilesForBg("tiles", "BG", 256, 256, TILE_VOID, TILE_BORDER_CORNER);
-    NF_LoadTilesForBg("tiles", "FG", 256, 256, TILE_INVISIBLE, TILE_TAIL_VER);
+    NF_LoadTilesForBg("tiles", "FG", 256, 256, TILE_INVISIBLE, TILE_TAIL_VER + TILEBASE_BODYFAT);
     NF_LoadTilesForBg("tiles", "Window", 256, 256, TILE_VOID, TILE_INVISIBLE);
     NF_LoadTextFont("fnt/default", "font", 256, 256, 0);
     NF_CreateTiledBg(game_screen, BG_LAYER, "BG");
@@ -364,6 +442,8 @@ void init_game(Difficulty selected_difficulty, bool selected_wrap) {
     // Init variables
     difficulty = selected_difficulty;
     score = 0;
+    stars = initial_stars;
+    snake_size = INITIAL_SNAKE_SIZE;
     for (int i = INITIAL_SNAKE_SIZE; i < MAX_SNAKE_TILES; i++) {
         snake_tiles[i].valid = false;
     }
@@ -373,12 +453,18 @@ void init_game(Difficulty selected_difficulty, bool selected_wrap) {
     direction = rand() % NUM_DIRECTIONS;
     prev_direction = direction;
     randomize_food_pos();
+    food_anim_frame = 0;
+    food_anim_counter = 0;
     spd_counter = 0;
     move_lock = false;
     wrap = selected_wrap;
     paused = false;
     pause_selection = PAUSE_CONTINUE;
     game_over = false;
+
+    level_beaten = false;
+    end_game_counter = 0;
+    text_shown = true;
 
     // Build BG border
     build_bg_border();
@@ -421,6 +507,7 @@ void init_game(Difficulty selected_difficulty, bool selected_wrap) {
     }
     NF_UpdateVramMap(game_screen, FG_LAYER);
 
+    update_level_graphics();
     update_score_text();
 
     update_snake_head();
@@ -469,6 +556,32 @@ void tick_game() {
     int keys = keysHeld();
     int keysPressed = keysDown();
 
+    if (level_beaten) {
+        if (!(end_game_counter % END_GAME_BLINK_SPD)) {
+            if (text_shown) {
+                NF_HideBg(game_screen, TEXT_LAYER);
+                text_shown = false;
+            }
+            else {
+                NF_ShowBg(game_screen, TEXT_LAYER);
+                text_shown = true;
+            }
+        }
+        if (end_game_counter >= END_GAME_TIME) {
+            int old_score = score;
+            int old_stars = stars;
+            if (++stars > MAX_STARS)
+                stars = MAX_STARS;
+            init_game(difficulty, wrap, stars);
+            if (old_stars == MAX_STARS) {
+                score = old_score;
+                update_score_text();
+            }
+        }
+        end_game_counter++;
+        return;
+    }
+
     if (game_over) {
         if (keysPressed & KEY_START)
             init_title();
@@ -510,6 +623,8 @@ void tick_game() {
         return;
     }
 
+    do_food_anim();
+
     if (!move_lock) {
         if (direction == DIR_LEFT || direction == DIR_RIGHT) {
             if (keys & KEY_UP) {
@@ -535,7 +650,7 @@ void tick_game() {
         }
     }
 
-    spd_counter = (spd_counter + 1) % spd_table[difficulty];
+    spd_counter = (spd_counter + 1) % spd_table[stars][difficulty];
     if (!spd_counter) {
         // Move snake
 
@@ -598,14 +713,26 @@ void tick_game() {
             // Collision with body
             u32 tile_at_head = NF_GetTileOfMap(game_screen, FG_LAYER,
                 get_translated_x(head_x), get_translated_y(head_y));
-            if (tile_at_head >= TILE_BODY_HOR - TILE_INVISIBLE && tile_at_head <= TILE_TAIL_VER - TILE_INVISIBLE) {
+            if (tile_at_head >= TILE_BODY_HOR - TILE_INVISIBLE
+            && tile_at_head <= TILE_TAIL_VER + TILEBASE_BODYFAT - TILE_INVISIBLE) {
                 do_game_over();
             }
-
+        }
+        // Check game over again in case it happened in previous step
+        if (!game_over) {
             if (head_x == food_x && head_y == food_y) {
                 score++;
-                randomize_food_pos();
-                update_food_spr();
+                if (score > MAX_SCORE)
+                    score = MAX_SCORE;
+                snake_size++;
+                if (snake_size-INITIAL_SNAKE_SIZE >= star_threshold[stars]) {
+                    NF_ShowSprite(game_screen, SPRITE_FOOD, false);
+                    level_beaten = true;
+                }
+                else {
+                    randomize_food_pos();
+                    update_food_spr();
+                }
                 update_score_text();
             }
         }

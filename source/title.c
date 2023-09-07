@@ -132,6 +132,6 @@ void tick_title() {
     if (keys & (KEY_A | KEY_START)) {
         irqDisable(IRQ_HBLANK);
         irqClear(IRQ_HBLANK);
-        init_game(selected_difficulty, selected_wrap);
+        init_game(selected_difficulty, selected_wrap, 0);
     }
 }
