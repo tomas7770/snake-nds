@@ -12,7 +12,6 @@
 // Snake head must start with some margin from the borders
 // Ideally > INITIAL_SNAKE_SIZE, or else some code changes will be necessary
 #define RANDOM_SNAKE_MARGIN 5
-#define MAX_STARS 3
 
 #define FOOD_ANIM_FRAMES 4
 #define FOOD_ANIM_SPD 15
@@ -399,6 +398,15 @@ void update_score_text() {
     NF_UpdateTextLayers();
 }
 
+void update_highscore() {
+    int high_score = high_scores[wrap][difficulty].score;
+    int high_stars = high_scores[wrap][difficulty].stars;
+    if ((stars > high_stars) || (stars == high_stars && score > high_score)) {
+        high_scores[wrap][difficulty].score = score;
+        high_scores[wrap][difficulty].stars = stars;
+    }
+}
+
 // Init game state
 void init_game(Difficulty selected_difficulty, bool selected_wrap, int initial_stars) {
     state = STATE_GAME;
@@ -547,6 +555,7 @@ void unpause_game() {
 
 void do_game_over() {
     game_over = true;
+    update_highscore();
 
     NF_WriteText(game_screen, TEXT_LAYER, 23, 0, "Game over");
     NF_UpdateTextLayers();
@@ -573,6 +582,7 @@ void tick_game() {
             if (++stars > MAX_STARS)
                 stars = MAX_STARS;
             init_game(difficulty, wrap, stars);
+            update_highscore();
             if (old_stars == MAX_STARS) {
                 score = old_score;
                 update_score_text();
@@ -614,6 +624,7 @@ void tick_game() {
                 unpause_game();
                 break;
             case PAUSE_QUIT:
+                update_highscore();
                 init_title();
                 break;
             default:
