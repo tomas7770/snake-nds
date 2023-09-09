@@ -25,5 +25,8 @@ typedef struct {
 
 extern State state;
 extern HighScore high_scores[2][NUM_DIFFICULTIES];
+extern char* save_path;
+
+void save_highscores();
 
 #endif

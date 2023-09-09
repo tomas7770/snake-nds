@@ -404,6 +404,7 @@ void update_highscore() {
     if ((stars > high_stars) || (stars == high_stars && score > high_score)) {
         high_scores[wrap][difficulty].score = score;
         high_scores[wrap][difficulty].stars = stars;
+        save_highscores();
     }
 }
 
