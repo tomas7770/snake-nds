@@ -43,7 +43,7 @@ void load_highscores(char* game_path) {
     FILE* save_file = fopen(save_path, "rb");
     if (!save_file)
         return;
-        
+
     for (int i = 0; i < 2; i++) {
         for (int j = 0; j < NUM_DIFFICULTIES; j++) {
             u16 score, stars;
@@ -75,8 +75,6 @@ int main(int argc, char* argv[]) {
     srand(time(NULL));
     NF_InitTiledBgBuffers();
     NF_InitSpriteBuffers();
-
-    fatInitDefault();
 
     nitroFSInit(NULL);
     NF_SetRootFolder("NITROFS");
